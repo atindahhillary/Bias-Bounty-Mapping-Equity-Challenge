@@ -13,6 +13,22 @@ submission needed):
 
 ## Methodology & Documentation
 
+### Evaluation
+
+The competition's error metric is **Root Mean Squared Error (RMSE)**, scored against
+organiser-computed reference `coverage_gap_score` values, on a public leaderboard covering ~30%
+of the test set while the challenge is open and a private leaderboard covering the remaining 70%
+revealed at close.
+
+The submission built by this pipeline (`submission.csv`, assembled by
+`scripts/assemble_submission.py` from all four regions) scored **RMSE = 0.000145067** on the
+public leaderboard -- computed directly from the documented formula, not fit or tuned against
+the leaderboard. Three real hypotheses for closing the remaining gap were tested and ruled out
+(see "Alternative weightings tested" below): duplicate/overlapping features, point-in-polygon
+boundary handling, and length-measurement method. None moved the score, which is itself a useful
+data point -- it suggests the residual is implementation-level floating-point disagreement
+between independent pipelines rather than a methodological error in this one.
+
 ### Data sources
 
 All from the challenge's public bucket, `source.coop/humane-intelligence/bias-bounty-mapping-equity-challenge`
