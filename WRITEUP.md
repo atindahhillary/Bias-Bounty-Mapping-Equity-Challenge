@@ -1,4 +1,142 @@
-# Best Bias Discovery: One reference layer is quietly deciding the whole score
+# Methodology, Documentation, and Best Bias Discovery
+
+This writeup covers both special prizes, as one document per the challenge rules (no separate
+submission needed):
+
+- **[Methodology & Documentation](#methodology--documentation)** -- data sources, exact
+  per-component computation, edge cases, alternative weightings tested and why they weren't
+  adopted, and how every number here was validated before being trusted.
+- **[Best Bias Discovery: One reference layer is quietly deciding the whole score](#best-bias-discovery-one-reference-layer-is-quietly-deciding-the-whole-score)**
+  -- the finding itself, 15 named tracts, and why it matters.
+
+---
+
+## Methodology & Documentation
+
+### Data sources
+
+All from the challenge's public bucket, `source.coop/humane-intelligence/bias-bounty-mapping-equity-challenge`
+(no credentials needed) -- read directly over HTTPS via DuckDB's `httpfs`/`spatial` extensions,
+nothing downloaded first:
+
+| Source | Used for | Vintage |
+|---|---|---|
+| Overture Maps | roads, buildings, places (all three numerators) | Release `2026-08-19.0`, pinned by the bucket -- I never queried Overture independently, so this is automatic, not something I had to enforce |
+| Census TIGER/Line | road-network reference (denominator) | 2025 |
+| Microsoft GlobalML US Building Footprints | building reference (denominator) | Feb 2026 refresh |
+| USGS National Map (HIFLD's maintained successor) | fire/EMS/schools reference (denominator) | as shipped in the bucket |
+| Census County Business Patterns | establishments reference (denominator), `cbp_estab_bus` column | as shipped |
+| Census ACS 5-Year housing counts | **not used** -- explicitly excluded from the building ratio per spec (ACS counts housing units, Microsoft counts structures) |
+| Strata tables (SVI, CVI, RUCA/RUCC, tribal, drought, wildfire, heat) | Bias Discovery breakdowns only, no effect on the scored submission | per-source vintages in the bucket README |
+
+### Computing each component
+
+```
+transport_gap = 1 - min(1, overture_named_highway_length_m / tiger_named_highway_length_m)
+building_gap  = 1 - min(1, overture_building_count / microsoft_building_count)
+poi_gap       = mean(poi_gap_hifld, poi_gap_cbp), each side used only if defined
+  poi_gap_hifld = mean of defined per-type gaps among fire / EMS / schools
+    each = 1 - min(1, overture_count_of_type / hifld_count_of_type)
+  poi_gap_cbp   = 1 - min(1, overture_places_total / cbp_estab_bus)
+coverage_gap_score = mean of {transport_gap, building_gap, poi_gap} that are defined
+```
+
+- **Roads**: TIGER `MTFCC IN ('S1100','S1200')` against Overture `class IN ('motorway','trunk','primary','secondary')`.
+  Each road layer is spatially joined to tract polygons with a bbox pre-filter then
+  `ST_Intersects`, clipped per-tract with `ST_Intersection`, and measured in EPSG:5070 (the exact
+  method the bucket's own README demonstrates for this dataset).
+- **Buildings**: both Overture and Microsoft footprints are joined to tracts by
+  point-in-polygon on their centroid (`ST_Contains(tract, ST_Centroid(building))`), then counted.
+- **Places**: Overture POIs matched on `categories.primary` -- `fire_department`,
+  `ambulance_and_ems_services`, and the six school categories listed in the bucket README --
+  against the corresponding HIFLD layer, plus all Overture POIs (no category filter) against
+  CBP establishments. Hospitals are excluded per spec (Overture's hospital category runs ~12x
+  the reference count, so it can never show a deficit).
+- **Undefined vs. zero**: a component is *undefined* only when its **reference** count/length is
+  zero (no TIGER highway, no Microsoft footprint, no HIFLD facility of that type, no CBP
+  establishment) -- it is then excluded from the mean, not scored as 0. If the reference exists
+  but Overture has nothing, that's a real, defined full gap (`gap = 1`), not undefined. These are
+  easy to conflate and the distinction is load-bearing for the whole scoring rule.
+
+### Edge cases
+
+- **GEOID as text throughout.** Every read (`read_csv_auto(..., types={'GEOID':'VARCHAR'})` in
+  DuckDB, `dtype={'GEOID': str}` in pandas) preserves leading zeros -- verified on Maricopa
+  (state FIPS `04`).
+- **Water-dominated / no-reference-at-all tracts**: the challenge's own sample-submission files
+  already drop tracts with all three components undefined (7 in south-central-tx, all `99xx`
+  water tracts, per the bucket README). My pipeline joins against those sample-submission files
+  as the authoritative tract list rather than re-deriving which tracts to score, so this exclusion
+  is inherited correctly rather than reimplemented.
+- **Zero-population tracts**: I did *not* drop or special-case these in the scored submission --
+  every GEOID in the sample-submission file gets a real computed score, population or not. I did
+  flag them separately in the Bias Discovery evidence (4 of the 24 single-component tracts have
+  `pop_total == 0`) rather than folding them into the "real communities affected" narrative, since
+  claiming emergency-dispatch impact for an uninhabited tract would be a real evidence problem.
+- **A submission-format lesson worth documenting**: my first Zindi upload was a single region's
+  CSV, and was rejected for missing GEOIDs in every other region. The competition scores one file
+  covering all 9,379 tracts across all four regions, not a file per region -- an easy mistake
+  given each region ships its own `<region>-sample-submission.csv`, and worth stating explicitly
+  since it cost a submission slot to discover.
+
+### Alternative weightings tested, and why they weren't adopted
+
+Two real alternatives were tested against the smallest region (northern-ca) before deciding they
+weren't worth adopting:
+
+1. **Point-in-polygon boundary rule.** `ST_Contains` (strict interior) vs. `ST_Covers` (includes
+   the boundary) for assigning building centroids to tracts. Tested against all 1,164,724
+   Overture building centroids in northern-ca: **zero tracts changed.** Kept `ST_Contains` since
+   it makes no difference and is the simpler rule.
+2. **Length-measurement method for roads.** The bucket README documents two valid ways to get a
+   real-world length from `OGC:CRS84` geometry: reproject to `EPSG:5070` (Albers equal-area,
+   CONUS) and take planar length, or use `ST_Length_Spheroid` on flipped coordinates (true
+   geodesic length). Tested both against northern-ca's TIGER named-highway total: 10,013,118.8m
+   (Albers) vs. 10,005,187.3m (geodesic), a **0.079% difference**. Since `transport_gap` is a
+   ratio of two lengths measured the same way in the same small region, this distortion mostly
+   cancels rather than propagating into the gap value. Kept `EPSG:5070` since it matches the
+   README's own worked example exactly.
+3. **`poi_gap` when only one half is defined.** The spec states `poi_gap` is "the mean of the two
+   halves" (HIFLD facilities, CBP establishments) but doesn't say what happens when only one half
+   has a reference to compare against. I applied the same "mean of defined parts" rule the spec
+   states explicitly for the top-level `coverage_gap_score`, for consistency -- this is a genuine
+   judgment call where the source documentation is silent, and a reviewer implementing this
+   differently would get a slightly different `poi_gap` in that specific case. Flagged here
+   rather than left implicit.
+
+### Validating before trusting
+
+Every number in this writeup was checked against something the challenge already publishes,
+*before* anything was built on top of it:
+
+| Check | Computed | Published | Match |
+|---|---:|---:|---|
+| Northern CA, tracts missing >=1 component | 36.9% | 37% | Yes |
+| Maricopa, tracts missing >=1 component | 54.9% | 55% | Yes |
+| Eastern OK, tracts missing >=1 component | 21.3% | 21% | Yes |
+| South-Central TX, tracts missing >=1 component | 28.5% | 28% | Yes |
+| Northern CA, tracts with zero named highway (`transport_defined=false`) | 218 of 591 | 218 of 591 | **Exact** |
+
+The last row is an exact match, not a rounding coincidence -- it was the first thing checked,
+before any bias-discovery analysis was trusted.
+
+### Reproducing all of it
+
+```bash
+git clone https://github.com/atindahhillary/Bias-Bounty-Mapping-Equity-Challenge
+cd Bias-Bounty-Mapping-Equity-Challenge
+pip install -r requirements.txt
+python scripts/run_pipeline.py         # computes all 4 regions from the live bucket
+python scripts/assemble_submission.py  # builds the scored submission.csv, cross-checked
+                                        # GEOID-for-GEOID against the live sample-submission files
+```
+
+No credentials required at any step. `src/pipeline.py` has the full per-component computation;
+`scripts/run_pipeline.py` is the entry point that produced `data/tracts.csv`.
+
+---
+
+## Best Bias Discovery: One reference layer is quietly deciding the whole score
 
 ## The pattern
 
