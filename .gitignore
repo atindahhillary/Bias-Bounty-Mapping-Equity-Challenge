@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+data/tracts.csv
+exports/submission_log.csv
+.streamlit/secrets.toml

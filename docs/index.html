@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Bias Bounty: Mapping Equity Challenge</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:840px;margin:40px auto;padding:0 20px;line-height:1.6;color:#1a1a1a}
+h1,h2{color:#111} table{border-collapse:collapse;width:100%;margin:16px 0}
+th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;font-size:14px}
+th{background:#f4f4f4} code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+.badge{display:inline-block;background:#fff3cd;border:1px solid #ffe69c;color:#664d03;padding:4px 10px;border-radius:6px;font-size:13px;margin-bottom:16px}
+</style></head><body>
+<h1>Bias Bounty: Mapping Equity Challenge</h1>
+<p class="badge">Built from synthetic demo data -- real challenge data not yet loaded</p>
+<h2>The yardstick is missing where the risk is</h2>
+<p>The scoring rule drops any coverage part (roads, buildings, places) with nothing in the reference
+data to compare against. A tract then scores on one or two parts instead of three, and the hardest
+tracts to map can look fully covered.</p>
+<p>Worst-affected group by <code>region</code>: <b>Maricopa</b> --
+80.7% of tracts missing at least one part.</p>
+<h2>Hidden-gap re-score: top movers</h2>
+<table><tr><th>GEOID</th><th>Region</th><th>Parts defined</th><th>Coverage score</th><th>Hidden-gap score</th><th>Delta</th></tr>
+<tr><td>6710000593</td><td>Eastern Oklahoma</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6011000305</td><td>South-Central Texas</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>2291000254</td><td>Northern California</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000091</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000093</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>2291000224</td><td>Northern California</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000088</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000085</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6011000337</td><td>South-Central Texas</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>2291000267</td><td>Northern California</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000074</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000058</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000039</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000038</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6710000557</td><td>Eastern Oklahoma</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr></table>
+<h2>Why it matters</h2>
+<ul>
+<li><b>Dispatch</b>: no fire/EMS station on record means routing has nothing to send responders from or to.</li>
+<li><b>Evacuation</b>: no named highway means planning falls back to unnamed local roads neither dataset scores.</li>
+<li><b>Relief</b>: FEMA/NGO metrics like this one can rank these communities as low-need when the real story is "unmeasured."</li>
+</ul>
+<p><i>Source: <a href="https://github.com/atindahhillary/Bias-Bounty-Mapping-Equity-Challenge">Bias-Bounty-Mapping-Equity-Challenge</a> repo. Full interactive workbench runs locally via <code>streamlit run app.py</code>.</i></p>
+</body></html>
