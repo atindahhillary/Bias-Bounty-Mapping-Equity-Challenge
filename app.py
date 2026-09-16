@@ -35,6 +35,17 @@ SUB_LOG = EXPORTS_DIR / "submission_log.csv"
 STRATA_COLS = ["region", "ur_class", "svi_quartile", "tribal_any", "rucc_metro",
                "usdm_summer_dsci", "usfs_WHP_mean", "epht_heat_days_summer"]
 
+SUBMISSION_COLUMNS = [
+    "GEOID", "coverage_gap_score", "region",
+    "transport_gap", "transport_defined",
+    "building_gap", "building_defined",
+    "poi_gap", "poi_defined",
+    "poi_gap_fire", "poi_defined_fire",
+    "poi_gap_ems", "poi_defined_ems",
+    "poi_gap_schools", "poi_defined_schools",
+    "poi_gap_cbp", "poi_defined_cbp",
+]
+
 st.set_page_config(page_title="Bias Bounty: Mapping Equity Challenge", layout="wide")
 
 
@@ -77,18 +88,37 @@ with tab_submit:
         "`coverage_gap_score` as the mean of whichever components are defined for that tract. "
         "This is already in `data/tracts.csv` if the pipeline has run."
     )
+    st.warning(
+        "Zindi scores **one upload covering all four regions** (9,379 tracts), not a file per "
+        "region. Uploading a single region's CSV is exactly what produces a "
+        "\"missing entries for IDs ...\" rejection for every tract outside it -- use the combined "
+        "download below for the actual submission."
+    )
+
+    submit_cols = [c for c in SUBMISSION_COLUMNS if c in df.columns]
+    n_regions = df["region"].nunique() if "region" in df.columns else 0
+    if submit_cols and n_regions >= 1:
+        combined = df[submit_cols].copy()
+        bad = {c: int(combined[c].isna().sum()) for c in submit_cols if combined[c].isna().any()}
+        if bad:
+            st.error(f"Blank cells found in {bad} -- Zindi rejects any included column with a gap. Fix before uploading.")
+        else:
+            st.success(f"Ready: {len(combined)} tracts across {n_regions} region(s), {len(submit_cols)} columns, no blank cells.")
+        st.download_button(
+            "Download submission.csv (all regions -- upload this one)",
+            combined.to_csv(index=False).encode(),
+            file_name="submission.csv",
+            mime="text/csv",
+            type="primary",
+        )
+
+    st.divider()
     if "region" in df.columns:
+        st.caption("Per-region view, for inspection only -- do not upload this alone.")
         region_pick = st.selectbox("Region", sorted(df["region"].unique()))
         region_df = df[df["region"] == region_pick]
-        export_cols = ["GEOID", "transport_gap", "building_gap", "poi_gap", "coverage_gap_score"]
-        export_cols = [c for c in export_cols if c in region_df.columns]
-        st.dataframe(region_df[export_cols].head(15), use_container_width=True)
-        st.download_button(
-            f"Download {region_pick}-submission.csv",
-            region_df[export_cols].to_csv(index=False).encode(),
-            file_name=f"{region_pick}-submission.csv",
-            mime="text/csv",
-        )
+        preview_cols = [c for c in submit_cols if c in region_df.columns] or ["GEOID"]
+        st.dataframe(region_df[preview_cols].head(15), use_container_width=True)
 
     st.divider()
     st.subheader("Constant-submission RMSE cross-check")
