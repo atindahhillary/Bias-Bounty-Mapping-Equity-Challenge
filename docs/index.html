@@ -10,21 +10,22 @@ th{background:#f4f4f4} code{background:#f4f4f4;padding:2px 4px;border-radius:3px
 .badge{display:inline-block;background:#fff3cd;border:1px solid #ffe69c;color:#664d03;padding:4px 10px;border-radius:6px;font-size:13px;margin-bottom:16px}
 </style></head><body>
 <h1>Bias Bounty: Mapping Equity Challenge</h1>
-<p class="badge">Built from synthetic demo data -- real challenge data not yet loaded</p>
+
 <h2>The yardstick is missing where the risk is</h2>
-<p>The scoring rule drops any coverage part (roads, buildings, places) with nothing in the reference
-data to compare against. A tract then scores on one or two parts instead of three, and the hardest
-tracts to map can look fully covered.</p>
-<p>Worst-affected group by <code>region</code>: <b>Maricopa</b> --
-80.7% of tracts missing at least one part.</p>
+<p>The scoring rule drops any coverage component (roads, buildings, places) with nothing in the
+reference data to compare against. A tract then scores on one or two components instead of
+three, and the hardest tracts to map can look fully covered.</p>
+<p>Worst-affected group by <code>region</code>: <b>maricopa-az</b> --
+54.9% of tracts missing at least one component. Driven mostly by
+<b>transport</b> coverage.</p>
 <h2>Hidden-gap re-score: top movers</h2>
 <table><tr><th>GEOID</th><th>Region</th><th>Parts defined</th><th>Coverage score</th><th>Hidden-gap score</th><th>Delta</th></tr>
-<tr><td>6710000593</td><td>Eastern Oklahoma</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6011000305</td><td>South-Central Texas</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>2291000254</td><td>Northern California</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000091</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000093</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>2291000224</td><td>Northern California</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000088</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000085</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6011000337</td><td>South-Central Texas</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>2291000267</td><td>Northern California</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000074</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000058</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000039</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6571000038</td><td>Maricopa</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>6710000557</td><td>Eastern Oklahoma</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr></table>
+<tr><td>48473980000</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04005980200</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013116707</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48465980000</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48453036000</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013116715</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013103305</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013980700</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013940700</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48113019301</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04019004054</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48085031633</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04027980003</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48029980005</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48027980003</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr></table>
 <h2>Why it matters</h2>
 <ul>
 <li><b>Dispatch</b>: no fire/EMS station on record means routing has nothing to send responders from or to.</li>
 <li><b>Evacuation</b>: no named highway means planning falls back to unnamed local roads neither dataset scores.</li>
 <li><b>Relief</b>: FEMA/NGO metrics like this one can rank these communities as low-need when the real story is "unmeasured."</li>
 </ul>
-<p><i>Source: <a href="https://github.com/atindahhillary/Bias-Bounty-Mapping-Equity-Challenge">Bias-Bounty-Mapping-Equity-Challenge</a> repo. Full interactive workbench runs locally via <code>streamlit run app.py</code>.</i></p>
+<p><i>Source: <a href="https://github.com/atindahhillary/Bias-Bounty-Mapping-Equity-Challenge">Bias-Bounty-Mapping-Equity-Challenge</a> repo, computed directly from the live challenge data at source.coop. Full interactive workbench runs locally via <code>streamlit run app.py</code>.</i></p>
 </body></html>
