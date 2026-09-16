@@ -3,29 +3,84 @@
 <title>Bias Bounty: Mapping Equity Challenge</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:840px;margin:40px auto;padding:0 20px;line-height:1.6;color:#1a1a1a}
-h1,h2{color:#111} table{border-collapse:collapse;width:100%;margin:16px 0}
-th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;font-size:14px}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:860px;margin:40px auto;padding:0 20px;line-height:1.6;color:#1a1a1a}
+h1,h2{color:#111} table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+th,td{border:1px solid #ddd;padding:6px 10px;text-align:left}
 th{background:#f4f4f4} code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
-.badge{display:inline-block;background:#fff3cd;border:1px solid #ffe69c;color:#664d03;padding:4px 10px;border-radius:6px;font-size:13px;margin-bottom:16px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;background:#e7f3ff;border:1px solid #b6dcff;color:#0a4d8f;padding:4px 10px;border-radius:6px;font-size:13px;margin:2px 4px 2px 0}
+.tribal{background:#fff3cd;border:1px solid #ffe69c;color:#664d03;padding:1px 6px;border-radius:4px;font-size:11px;margin-left:6px}
+.stat-row{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0}
+.stat{border:1px solid #ddd;border-radius:8px;padding:10px 14px;flex:1;min-width:140px}
+.stat b{font-size:22px;display:block}
+.stat span{font-size:12px;color:#666}
 </style></head><body>
-<h1>Bias Bounty: Mapping Equity Challenge</h1>
 
-<h2>The yardstick is missing where the risk is</h2>
-<p>The scoring rule drops any coverage component (roads, buildings, places) with nothing in the
-reference data to compare against. A tract then scores on one or two components instead of
-three, and the hardest tracts to map can look fully covered.</p>
-<p>Worst-affected group by <code>region</code>: <b>maricopa-az</b> --
-54.9% of tracts missing at least one component. Driven mostly by
-<b>transport</b> coverage.</p>
-<h2>Hidden-gap re-score: top movers</h2>
-<table><tr><th>GEOID</th><th>Region</th><th>Parts defined</th><th>Coverage score</th><th>Hidden-gap score</th><th>Delta</th></tr>
-<tr><td>48473980000</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04005980200</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013116707</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48465980000</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48453036000</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013116715</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013103305</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013980700</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04013940700</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48113019301</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04019004054</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48085031633</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>04027980003</td><td>maricopa-az</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48029980005</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr><tr><td>48027980003</td><td>south-central-tx</td><td>1</td><td>0.000</td><td>0.667</td><td>0.667</td></tr></table>
+<h1>Bias Bounty: Mapping Equity Challenge</h1>
+<p><span class="badge">$10,000 prize pool</span><span class="badge">9,379 tracts scored</span><span class="badge">All 4 regions validated</span></p>
+
+<h2>One reference layer is quietly deciding the whole score</h2>
+<p><code>coverage_gap_score</code> is the mean of whichever components (roads, buildings, places)
+have a reference to compare against. Across all 9,379 tracts, those three components aren't
+missing equally:</p>
+
+<div class="stat-row">
+  <div class="stat"><b>99.9%</b><span>Buildings defined</span></div>
+  <div class="stat"><b>99.7%</b><span>Places defined</span></div>
+  <div class="stat"><b>67.5%</b><span>Roads defined</span></div>
+</div>
+
+<p>When a tract has no named highway <i>and</i> no HIFLD facility <i>and</i> no CBP establishment
+on record, its entire score collapses to the building component alone -- and Overture's building
+coverage is good almost everywhere, so that lone surviving number is usually near zero. A real,
+populated community can score as "near-perfect coverage" while the two components that actually
+matter for emergency dispatch and evacuation are simply absent from the number, not measured, not
+zero.</p>
+
+<p><b>This runs opposite to the intuitive guess.</b> Naively, tribal and rural tracts should be
+the ones missing data. They aren't: rural tracts lack a highway only 7.3% of the time versus
+38.2% for urban tracts -- a large rural tract is far more likely to have some stretch of state
+highway crossing it than a small, purely residential urban tract is. The masking problem
+concentrates in <b>small, urban, non-tribal tracts</b>, which is itself the more useful thing to
+know, since it means no rural/tribal adjustment alone would fix this scoring rule.</p>
+
+<h2>15 named tracts, real population, one working reference layer</h2>
+<p>Scored on exactly one of three components, that component near zero, population verified
+&gt;0 (four more zero-population tracts show the identical pattern and are excluded here as
+likely water/uninhabited, per the challenge's own edge-case guidance).</p>
+<table>
+<tr><th>GEOID</th><th>Region</th><th class="num">Population</th><th class="num">Score</th><th class="num">Unmasked</th><th>Note</th></tr>
+<tr><td>48001950402</td><td>South-Central TX</td><td class="num">7,115</td><td class="num">0.000</td><td class="num">0.667</td><td>No highway, no CBP, no HIFLD facility</td></tr>
+<tr><td>48473980000</td><td>South-Central TX</td><td class="num">5,841</td><td class="num">0.000</td><td class="num">0.667</td><td>Same pattern</td></tr>
+<tr><td>06061023600</td><td>Northern CA</td><td class="num">4,361</td><td class="num">0.0004</td><td class="num">0.667</td><td>Wildfire corridor</td></tr>
+<tr><td>48121020111</td><td>South-Central TX</td><td class="num">4,402</td><td class="num">0.006</td><td class="num">0.667</td><td></td></tr>
+<tr><td>04013082020</td><td>Maricopa, AZ</td><td class="num">4,027</td><td class="num">0.023</td><td class="num">0.667</td><td>Heat/drought region</td></tr>
+<tr><td>48085031633</td><td>South-Central TX</td><td class="num">3,636</td><td class="num">0.000</td><td class="num">0.667</td><td></td></tr>
+<tr><td>04013103305</td><td>Maricopa, AZ</td><td class="num">3,536</td><td class="num">0.000</td><td class="num">0.667</td><td>Sole component here is POI, not buildings</td></tr>
+<tr><td>06061021048</td><td>Northern CA</td><td class="num">3,439</td><td class="num">0.005</td><td class="num">0.667</td><td>Wildfire corridor</td></tr>
+<tr><td>48113019301</td><td>South-Central TX</td><td class="num">3,098</td><td class="num">0.000</td><td class="num">0.667</td><td></td></tr>
+<tr><td>48201251401</td><td>South-Central TX</td><td class="num">3,011</td><td class="num">0.002</td><td class="num">0.667</td><td></td></tr>
+<tr><td>04013116707</td><td>Maricopa, AZ</td><td class="num">2,730</td><td class="num">0.000</td><td class="num">0.667</td><td></td></tr>
+<tr><td>48491020609</td><td>South-Central TX</td><td class="num">2,297</td><td class="num">0.000</td><td class="num">0.667</td><td></td></tr>
+<tr><td>40143009014</td><td>Eastern OK</td><td class="num">1,924</td><td class="num">0.000</td><td class="num">0.667</td><td>Tribal tract<span class="tribal">tribal</span></td></tr>
+<tr><td>04019004054</td><td>Maricopa, AZ</td><td class="num">1,496</td><td class="num">0.000</td><td class="num">0.667</td><td></td></tr>
+<tr><td>04013940700</td><td>Maricopa, AZ</td><td class="num">88</td><td class="num">0.000</td><td class="num">0.667</td><td>Tribal, rural<span class="tribal">tribal</span></td></tr>
+</table>
+
 <h2>Why it matters</h2>
 <ul>
-<li><b>Dispatch</b>: no fire/EMS station on record means routing has nothing to send responders from or to.</li>
-<li><b>Evacuation</b>: no named highway means planning falls back to unnamed local roads neither dataset scores.</li>
-<li><b>Relief</b>: FEMA/NGO metrics like this one can rank these communities as low-need when the real story is "unmeasured."</li>
+<li><b>Dispatch and evacuation routing</b> built on this metric can't tell "excellent road mapping" from "never checked" -- both read as the same near-zero score.</li>
+<li><b>A 7,115-person tract (48001950402)</b> scores identically to a fully-instrumented downtown block, purely because Overture happens to have mapped its buildings well.</li>
+<li><b>The tribal example (40143009014, Eastern OK)</b> shows this isn't only a Texas/Arizona artifact -- it reproduces in a tribal statistical area in the drought/heat region the challenge itself flagged as high-risk.</li>
+<li><b>FEMA/NGO coverage metrics</b> using this score at face value would rank these communities as adequately mapped. The honest answer is "unmeasured," not "low-gap" -- and those call for very different responses before a wildfire, heat wave, or drought.</li>
 </ul>
-<p><i>Source: <a href="https://github.com/atindahhillary/Bias-Bounty-Mapping-Equity-Challenge">Bias-Bounty-Mapping-Equity-Challenge</a> repo, computed directly from the live challenge data at source.coop. Full interactive workbench runs locally via <code>streamlit run app.py</code>.</i></p>
+
+<h2>Reproducing this</h2>
+<ol>
+<li>Run <code>python scripts/run_pipeline.py</code> against the public challenge bucket (no credentials needed) &rarr; <code>data/tracts.csv</code>.</li>
+<li>Filter to <code>parts_defined == 1</code> and <code>coverage_gap_score &lt; 0.05</code> -- the exact query behind the table above.</li>
+<li>Cross-reference <code>transport_defined</code>/<code>building_defined</code>/<code>poi_defined</code> to confirm which single component carries the score, and <code>pop_total</code> to exclude uninhabited tracts.</li>
+</ol>
+
+<p><i>Source: <a href="https://github.com/atindahhillary/Bias-Bounty-Mapping-Equity-Challenge">Bias-Bounty-Mapping-Equity-Challenge</a> repo &mdash; full methodology in <a href="https://github.com/atindahhillary/Bias-Bounty-Mapping-Equity-Challenge/blob/main/WRITEUP.md">WRITEUP.md</a>. Interactive workbench runs locally via <code>streamlit run app.py</code>.</i></p>
 </body></html>
