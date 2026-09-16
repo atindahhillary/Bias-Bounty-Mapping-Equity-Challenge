@@ -2,16 +2,22 @@
 
 Run with:  streamlit run app.py
 
+Data comes straight from the challenge's public bucket (source.coop/humane-intelligence/
+bias-bounty-mapping-equity-challenge), computed by src/pipeline.py following the exact method
+documented in the bucket's own README -- no guessing, the formula is fully known. Run
+`python scripts/run_pipeline.py` once to populate data/tracts.csv before launching this app
+(it takes a while: it queries the live geospatial data for all four regions).
+
 Three tabs:
-  1. Formula Lab      -- reverse-engineer the scoring formula, solve the constant-submission
-                          trick for mean/variance, track your 10/day submission budget, export CSV.
+  1. Submission Lab  -- build the per-region submission CSV in the exact sample-submission
+                         format, plus the constant-submission RMSE cross-check and a 10/day budget tracker.
   2. Bias Discovery    -- "the yardstick is missing where the risk is": parts-defined counts,
-                          strata breakdowns, hidden-gap re-score, ranked list of worst-affected tracts.
+                          breakdowns by real strata (tribal, SVI, urban/rural, drought, wildfire, heat),
+                          and the hidden-gap re-score.
   3. Writeup           -- auto-drafted narrative pulling live numbers from tab 2, editable,
                           exportable as the submission writeup (also mirrored to docs/index.html).
 """
 from __future__ import annotations
-import json
 from datetime import date
 from pathlib import Path
 
@@ -19,76 +25,83 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from src.scoring import per_tract_parts, rmse, constant_submission_solve, expected_rmse_for_constant
-from src.mock_data import generate as generate_mock
+from src.scoring import constant_submission_solve, expected_rmse_for_constant
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 EXPORTS_DIR = ROOT / "exports"
 SUB_LOG = EXPORTS_DIR / "submission_log.csv"
-CORE_COLS = {
-    "GEOID", "roads_ref", "roads_overture", "buildings_ref", "buildings_overture",
-    "fire_ref", "fire_overture", "ems_ref", "ems_overture", "schools_ref", "schools_overture",
-    "establishments_ref", "establishments_overture",
-}
+
+STRATA_COLS = ["region", "ur_class", "svi_quartile", "tribal_any", "rucc_metro",
+               "usdm_summer_dsci", "usfs_WHP_mean", "epht_heat_days_summer"]
 
 st.set_page_config(page_title="Bias Bounty: Mapping Equity Challenge", layout="wide")
 
 
 @st.cache_data
-def load_mock():
+def load_data() -> pd.DataFrame:
+    real_path = DATA_DIR / "tracts.csv"
+    if real_path.exists():
+        return pd.read_csv(real_path, dtype={"GEOID": str})
+    from src.mock_data import generate as generate_mock
     return generate_mock()
 
 
-def load_data() -> tuple[pd.DataFrame, bool]:
-    """Returns (df, is_mock). Prefers data/tracts.csv if present, else synthetic demo data."""
-    real_path = DATA_DIR / "tracts.csv"
-    if real_path.exists():
-        df = pd.read_csv(real_path, dtype={"GEOID": str})
-        return df, False
-    return load_mock(), True
-
-
-def strata_columns(df: pd.DataFrame) -> list[str]:
-    return [c for c in df.columns if c not in CORE_COLS]
-
+df = load_data()
+is_real = (DATA_DIR / "tracts.csv").exists()
 
 st.title("Bias Bounty: Mapping Equity Challenge")
-st.caption("Leaderboard formula copy + Best Bias Discovery workbench")
+st.caption("Real challenge data, computed live from source.coop -- no guessing, the formula is documented.")
+
+if not is_real:
+    st.error(
+        "data/tracts.csv not found -- showing synthetic demo data. Run "
+        "`python scripts/run_pipeline.py` to compute the real thing from the live challenge bucket."
+    )
 
 with st.sidebar:
     st.header("Data")
-    uploaded = st.file_uploader("Upload real tracts.csv (GEOID as text)", type="csv")
-    if uploaded is not None:
-        df = pd.read_csv(uploaded, dtype={"GEOID": str})
-        is_mock = False
-        st.success(f"Loaded {len(df)} tracts from upload.")
-    else:
-        df = load_mock() if not (DATA_DIR / "tracts.csv").exists() else pd.read_csv(DATA_DIR / "tracts.csv", dtype={"GEOID": str})
-        is_mock = not (DATA_DIR / "tracts.csv").exists()
-        if is_mock:
-            st.warning("Using synthetic demo data. Drop the real file at data/tracts.csv to switch over.")
-        else:
-            st.success(f"Loaded {len(df)} tracts from data/tracts.csv.")
+    st.write(f"{len(df)} tracts loaded" + (" (real)" if is_real else " (synthetic demo)"))
+    if "region" in df.columns:
+        for region, count in df["region"].value_counts().items():
+            st.write(f"- {region}: {count}")
+
+tab_submit, tab_bias, tab_writeup = st.tabs(["Submission Lab", "Bias Discovery", "Writeup"])
+
+# ---------------------------------------------------------------- Submission Lab
+with tab_submit:
+    st.subheader("Build your submission")
+    st.write(
+        "The coverage-gap formula is fully documented by the challenge's own data README -- "
+        "`transport_gap`, `building_gap`, `poi_gap` computed exactly as specified, "
+        "`coverage_gap_score` as the mean of whichever components are defined for that tract. "
+        "This is already in `data/tracts.csv` if the pipeline has run."
+    )
+    if "region" in df.columns:
+        region_pick = st.selectbox("Region", sorted(df["region"].unique()))
+        region_df = df[df["region"] == region_pick]
+        export_cols = ["GEOID", "transport_gap", "building_gap", "poi_gap", "coverage_gap_score"]
+        export_cols = [c for c in export_cols if c in region_df.columns]
+        st.dataframe(region_df[export_cols].head(15), use_container_width=True)
+        st.download_button(
+            f"Download {region_pick}-submission.csv",
+            region_df[export_cols].to_csv(index=False).encode(),
+            file_name=f"{region_pick}-submission.csv",
+            mime="text/csv",
+        )
 
     st.divider()
-    st.header("Formula variant")
-    clip_low = st.checkbox("Floor over-mapped gaps at 0", value=True, help="clip(1-Overture/ref, 0, ...) -- don't reward Overture having more than the reference.")
-    clip_high = st.checkbox("Ceiling gaps at 1", value=True)
-
-gap_cols = per_tract_parts(df, clip_low=clip_low, clip_high=clip_high)
-full = pd.concat([df, gap_cols], axis=1)
-
-tab_formula, tab_bias, tab_writeup = st.tabs(["Formula Lab", "Bias Discovery", "Writeup"])
-
-# ---------------------------------------------------------------- Formula Lab
-with tab_formula:
-    st.subheader("Constant-submission solver")
+    st.subheader("Constant-submission RMSE cross-check")
     st.write(
-        "Submit the same constant `c` for every tract twice (two different values), read the RMSE the "
-        "leaderboard hands back, and solve for the hidden reference mean and variance: "
-        "`RMSE^2 = variance + (mean - c)^2`. Costs 2 of your 10 daily submissions."
+        "Optional sanity check: submit a constant `c` for every tract twice, read the RMSE the "
+        "leaderboard hands back, and solve `RMSE^2 = variance + (mean - c)^2` for the hidden "
+        "reference mean/variance. Compare against your own computed mean/variance below to see "
+        "if your formula implementation lines up with the real one."
     )
+    if "coverage_gap_score" in df.columns:
+        st.metric("Your computed mean coverage_gap_score", f"{df['coverage_gap_score'].mean():.4f}")
+        st.metric("Your computed variance", f"{df['coverage_gap_score'].var():.4f}")
+
     c1, r1_col, c2, r2_col = st.columns(4)
     with c1:
         const1 = st.number_input("c1", value=0.0, step=0.05, format="%.2f")
@@ -98,99 +111,91 @@ with tab_formula:
         const2 = st.number_input("c2", value=1.0, step=0.05, format="%.2f")
     with r2_col:
         rmse2 = st.number_input("RMSE returned for c2", value=0.75, step=0.001, format="%.4f")
-
-    if st.button("Solve for mean / variance"):
+    if st.button("Solve for hidden mean / variance"):
         try:
             mean_est, var_est = constant_submission_solve(const1, rmse1, const2, rmse2)
-            st.success(f"Estimated reference mean = **{mean_est:.4f}**, variance = **{var_est:.4f}** (std = {np.sqrt(max(var_est,0)):.4f})")
-            st.session_state["ref_mean"] = mean_est
-            st.session_state["ref_var"] = var_est
+            st.success(f"Hidden reference mean = **{mean_est:.4f}**, variance = **{var_est:.4f}**")
         except ValueError as e:
             st.error(str(e))
 
-    if "ref_mean" in st.session_state:
-        st.write("Sanity check -- expected RMSE for any constant c, given the solved mean/variance:")
-        check_c = st.slider("c", 0.0, 1.0, 0.5, 0.01)
-        expected = expected_rmse_for_constant(check_c, st.session_state["ref_mean"], st.session_state["ref_var"])
-        st.metric("Expected RMSE", f"{expected:.4f}")
-
     st.divider()
-    st.subheader("Submission budget tracker (10/day)")
+    st.subheader("Submission budget tracker (10/day, 300 total)")
     EXPORTS_DIR.mkdir(exist_ok=True)
     if not SUB_LOG.exists():
         pd.DataFrame(columns=["date", "note", "public_rmse"]).to_csv(SUB_LOG, index=False)
     log = pd.read_csv(SUB_LOG)
     today = str(date.today())
     used_today = int((log["date"] == today).sum()) if not log.empty else 0
-    st.metric("Submissions used today", f"{used_today} / 10")
+    col_a, col_b = st.columns(2)
+    col_a.metric("Used today", f"{used_today} / 10")
+    col_b.metric("Used overall", f"{len(log)} / 300")
 
     with st.form("log_submission"):
-        note = st.text_input("What did you submit? (e.g. 'clip variant A, const=0.4')")
+        note = st.text_input("What did you submit?")
         obs_rmse = st.number_input("Public RMSE returned (optional)", value=0.0, step=0.0001, format="%.4f")
-        submitted = st.form_submit_button("Log this submission")
-        if submitted:
+        if st.form_submit_button("Log this submission"):
             new_row = pd.DataFrame([{"date": today, "note": note, "public_rmse": obs_rmse or None}])
-            log = pd.concat([log, new_row], ignore_index=True)
-            log.to_csv(SUB_LOG, index=False)
+            pd.concat([log, new_row], ignore_index=True).to_csv(SUB_LOG, index=False)
             st.success("Logged.")
             st.rerun()
     if not log.empty:
         st.dataframe(log.sort_values("date", ascending=False), use_container_width=True)
 
-    st.divider()
-    st.subheader("Export current formula's predictions")
-    export_df = full[["GEOID", "roads_gap", "buildings_gap", "places_gap", "score_coverage"]].rename(
-        columns={"score_coverage": "prediction"}
-    )
-    st.dataframe(export_df.head(20), use_container_width=True)
-    st.download_button(
-        "Download submission CSV",
-        export_df[["GEOID", "prediction"]].to_csv(index=False).encode(),
-        file_name="submission.csv",
-        mime="text/csv",
-    )
-
 # ---------------------------------------------------------------- Bias Discovery
 with tab_bias:
     st.subheader('"The yardstick is missing where the risk is"')
-    if is_mock:
-        st.info("Synthetic demo data -- swap in data/tracts.csv to see the real pattern.")
+    if not is_real:
+        st.info("Synthetic demo data -- run scripts/run_pipeline.py for the real numbers.")
 
-    strata = strata_columns(full)
-    default_strata = [c for c in ["region", "tribal", "svi_quartile", "rural_urban", "wildfire_exposure", "heat_exposure"] if c in strata]
-    group_col = st.selectbox("Break down by", strata, index=strata.index(default_strata[0]) if default_strata else 0)
+    strata = [c for c in STRATA_COLS if c in df.columns]
+    if not strata:
+        st.warning("No strata columns found -- run scripts/run_pipeline.py to fetch them.")
+    else:
+        group_col = st.selectbox("Break down by", strata)
 
-    grp = full.groupby(group_col).agg(
-        n_tracts=("GEOID", "count"),
-        mean_parts_defined=("parts_defined", "mean"),
-        pct_missing_ge1=("parts_defined", lambda s: float((s < 3).mean() * 100)),
-        mean_score_coverage=("score_coverage", "mean"),
-        mean_score_hidden_gap=("score_hidden_gap", "mean"),
-    ).reset_index()
-    grp["hidden_gap_delta"] = grp["mean_score_hidden_gap"] - grp["mean_score_coverage"]
+        grp = df.groupby(group_col, dropna=False).agg(
+            n_tracts=("GEOID", "count"),
+            mean_parts_defined=("parts_defined", "mean"),
+            pct_missing_ge1=("parts_defined", lambda s: float((s < 3).mean() * 100)),
+            mean_coverage_gap=("coverage_gap_score", "mean"),
+        ).reset_index()
 
-    st.dataframe(grp.style.format({
-        "mean_parts_defined": "{:.2f}", "pct_missing_ge1": "{:.1f}%",
-        "mean_score_coverage": "{:.3f}", "mean_score_hidden_gap": "{:.3f}", "hidden_gap_delta": "{:.3f}",
-    }), use_container_width=True)
+        st.dataframe(grp.style.format({
+            "mean_parts_defined": "{:.2f}", "pct_missing_ge1": "{:.1f}%", "mean_coverage_gap": "{:.3f}",
+        }), use_container_width=True)
+        st.bar_chart(grp.set_index(group_col)["pct_missing_ge1"])
+        st.caption(
+            "Published regional figures (at least one component undefined): Maricopa 55%, "
+            "Northern California 37%, South-Central Texas 28%, Eastern Oklahoma 21%."
+        )
 
-    st.bar_chart(grp.set_index(group_col)["pct_missing_ge1"])
-    st.caption("Share of tracts with at least one missing part, by group. Published regional figures: Maricopa 55%, Northern California 37%, South-Central Texas 28%, Eastern Oklahoma 21%.")
+        st.divider()
+        st.subheader("Which component drives the missingness?")
+        defined_cols = [c for c in ["transport_defined", "building_defined", "poi_defined"] if c in df.columns]
+        if defined_cols:
+            defined_rates = (df[defined_cols].mean() * 100).rename("pct_defined")
+            st.bar_chart(defined_rates)
+            st.caption("Road coverage (no named highway at all) is almost always the driver, not buildings or POIs.")
 
-    st.divider()
-    st.subheader("Hidden-gap re-score: biggest movers")
-    st.write("Treats a missing part as a full gap of 1 instead of dropping it, then ranks tracts by how much their score would rise.")
-    top_n = st.slider("How many tracts to list", 5, 30, 15)
-    movers = full.copy()
-    movers["delta"] = movers["score_hidden_gap"] - movers["score_coverage"]
-    movers_ranked = movers.sort_values("delta", ascending=False).head(top_n)
-    show_cols = ["GEOID", "region", "parts_defined", "score_coverage", "score_hidden_gap", "delta"] + [c for c in ["tribal", "svi_quartile", "rural_urban"] if c in movers.columns]
-    st.dataframe(movers_ranked[show_cols].style.format({
-        "score_coverage": "{:.3f}", "score_hidden_gap": "{:.3f}", "delta": "{:.3f}",
-    }), use_container_width=True)
-    st.session_state["top_movers"] = movers_ranked[show_cols]
-    st.session_state["group_summary"] = grp
-    st.session_state["group_col"] = group_col
+        st.divider()
+        st.subheader("Hidden-gap re-score: biggest movers")
+        st.write("Treats a missing part as a full gap of 1 instead of dropping it, then ranks tracts by how much their score would rise.")
+        parts = ["transport_gap", "building_gap", "poi_gap"]
+        defined = ["transport_defined", "building_defined", "poi_defined"]
+        if all(c in df.columns for c in parts + defined):
+            hidden = df[parts].where(df[defined].values, other=1.0)
+            df["score_hidden_gap"] = hidden.mean(axis=1)
+            df["delta"] = df["score_hidden_gap"] - df["coverage_gap_score"]
+            top_n = st.slider("How many tracts to list", 5, 30, 15)
+            movers = df.sort_values("delta", ascending=False).head(top_n)
+            show_cols = ["GEOID", "region", "parts_defined", "coverage_gap_score", "score_hidden_gap", "delta"] + strata[:3]
+            show_cols = list(dict.fromkeys(c for c in show_cols if c in movers.columns))
+            st.dataframe(movers[show_cols].style.format({
+                "coverage_gap_score": "{:.3f}", "score_hidden_gap": "{:.3f}", "delta": "{:.3f}",
+            }), use_container_width=True)
+            st.session_state["top_movers"] = movers[show_cols]
+            st.session_state["group_summary"] = grp
+            st.session_state["group_col"] = group_col
 
 # ---------------------------------------------------------------- Writeup
 with tab_writeup:
@@ -203,30 +208,37 @@ with tab_writeup:
         st.warning("Open the Bias Discovery tab first so it has numbers to pull from.")
     else:
         worst_group = grp.sort_values("pct_missing_ge1", ascending=False).iloc[0]
+        driver = ""
+        if all(c in df.columns for c in ["transport_defined", "building_defined", "poi_defined"]):
+            rates = df[["transport_defined", "building_defined", "poi_defined"]].mean()
+            driver = rates.idxmin().replace("_defined", "")
+
         draft = f"""## The yardstick is missing where the risk is
 
-The challenge's scoring rule drops any of the three coverage parts (roads, buildings, places)
-when a tract has nothing in the reference data to compare against. A tract then gets scored on
-one or two parts instead of three, and can post a near-perfect gap score purely because the
-hardest-to-map features were never on record.
+The challenge's scoring rule drops any of the three coverage components (roads, buildings,
+places) when a tract has nothing in the reference data to compare against. A tract then gets
+scored on one or two components instead of three, and can post a near-perfect gap score purely
+because the hardest-to-map feature -- almost always **{driver or 'roads'}** -- was never on
+record to begin with.
 
 Breaking tracts down by **{group_col}**, the worst-affected group is **{worst_group[group_col]}**,
-where {worst_group['pct_missing_ge1']:.1f}% of tracts are missing at least one part (published regional
-baselines: Maricopa 55%, Northern California 37%, South-Central Texas 28%, Eastern Oklahoma 21%).
+where {worst_group['pct_missing_ge1']:.1f}% of tracts are missing at least one component
+(published regional baselines: Maricopa 55%, Northern California 37%, South-Central Texas 28%,
+Eastern Oklahoma 21%).
 
 ### Hidden-gap re-score
-Re-scoring with a missing part treated as a full gap of 1 (instead of dropped) moves the following
-tracts the most:
+Re-scoring with a missing component treated as a full gap of 1 (instead of dropped) moves the
+following tracts the most:
 
-{chr(10).join(f"- Tract {row['GEOID']} ({row.get('region','?')}): {row['score_coverage']:.2f} -> {row['score_hidden_gap']:.2f} (parts defined: {row['parts_defined']})" for _, row in movers.head(15).iterrows())}
+{chr(10).join(f"- Tract {row['GEOID']} ({row.get('region','?')}): {row['coverage_gap_score']:.2f} -> {row['score_hidden_gap']:.2f} (parts defined: {row['parts_defined']})" for _, row in movers.head(15).iterrows())}
 
 ### Why it matters
 - **Dispatch**: no fire/EMS station on record in either dataset means routing has nothing to send
   responders from or to.
-- **Evacuation**: no named highway means evacuation planning falls back to unnamed local roads that
+- **Evacuation**: no named highway means evacuation planning depends on unnamed local roads that
   neither dataset scores.
-- **Relief**: FEMA/NGO coverage metrics like this one can rank these communities as low-need when the
-  real story is "unmeasured," not "low-gap."
+- **Relief**: FEMA/NGO coverage metrics like this one can rank these communities as low-need when
+  the real story is "unmeasured," not "low-gap."
 """
         edited = st.text_area("Editable draft", draft, height=500)
         st.download_button("Download writeup.md", edited.encode(), file_name="writeup.md", mime="text/markdown")
@@ -234,7 +246,7 @@ tracts the most:
         if st.button("Also write docs/index.html (for GitHub Pages)"):
             html_rows = "".join(
                 f"<tr><td>{row['GEOID']}</td><td>{row.get('region','?')}</td><td>{row['parts_defined']}</td>"
-                f"<td>{row['score_coverage']:.3f}</td><td>{row['score_hidden_gap']:.3f}</td><td>{row['delta']:.3f}</td></tr>"
+                f"<td>{row['coverage_gap_score']:.3f}</td><td>{row['score_hidden_gap']:.3f}</td><td>{row['delta']:.3f}</td></tr>"
                 for _, row in movers.head(15).iterrows()
             )
             html = f"""<!doctype html>
@@ -249,11 +261,12 @@ th{{background:#f4f4f4}} code{{background:#f4f4f4;padding:2px 4px;border-radius:
 </style></head><body>
 <h1>Bias Bounty: Mapping Equity Challenge</h1>
 <h2>The yardstick is missing where the risk is</h2>
-<p>The scoring rule drops any coverage part (roads, buildings, places) with nothing in the reference
-data to compare against. A tract then scores on one or two parts instead of three, and the hardest
-tracts to map can look fully covered.</p>
+<p>The scoring rule drops any coverage component (roads, buildings, places) with nothing in the
+reference data to compare against. A tract then scores on one or two components instead of
+three, and the hardest tracts to map can look fully covered.</p>
 <p>Worst-affected group by <code>{group_col}</code>: <b>{worst_group[group_col]}</b> --
-{worst_group['pct_missing_ge1']:.1f}% of tracts missing at least one part.</p>
+{worst_group['pct_missing_ge1']:.1f}% of tracts missing at least one component. Driven mostly by
+<b>{driver or 'roads'}</b> coverage.</p>
 <h2>Hidden-gap re-score: top movers</h2>
 <table><tr><th>GEOID</th><th>Region</th><th>Parts defined</th><th>Coverage score</th><th>Hidden-gap score</th><th>Delta</th></tr>
 {html_rows}</table>
@@ -263,7 +276,7 @@ tracts to map can look fully covered.</p>
 <li><b>Evacuation</b>: no named highway means planning falls back to unnamed local roads neither dataset scores.</li>
 <li><b>Relief</b>: FEMA/NGO metrics like this one can rank these communities as low-need when the real story is "unmeasured."</li>
 </ul>
-<p><i>Generated from {'synthetic demo data -- replace with real challenge data for the actual submission' if is_mock else 'real challenge data'}.</i></p>
+<p><i>Computed from {'the real challenge data (source.coop)' if is_real else 'synthetic demo data -- replace with the real run for the actual submission'}.</i></p>
 </body></html>"""
             docs_dir = ROOT / "docs"
             docs_dir.mkdir(exist_ok=True)

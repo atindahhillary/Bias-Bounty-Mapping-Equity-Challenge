@@ -1,5 +1,6 @@
-"""Regenerate docs/index.html without launching Streamlit -- used for CI/local rebuilds
-and to seed the GitHub Pages site before real data is ever loaded.
+"""Regenerate docs/index.html without launching Streamlit -- used to seed/refresh the
+GitHub Pages site from whatever is currently in data/tracts.csv (real if the pipeline has
+run, synthetic demo data otherwise).
 """
 import sys
 from pathlib import Path
@@ -8,14 +9,9 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 import pandas as pd
-from src.scoring import per_tract_parts
-from src.mock_data import generate as generate_mock
 
-CORE_COLS = {
-    "GEOID", "roads_ref", "roads_overture", "buildings_ref", "buildings_overture",
-    "fire_ref", "fire_overture", "ems_ref", "ems_overture", "schools_ref", "schools_overture",
-    "establishments_ref", "establishments_overture",
-}
+STRATA_COLS = ["region", "ur_class", "svi_quartile", "tribal_any", "rucc_metro",
+               "usdm_summer_dsci", "usfs_WHP_mean", "epht_heat_days_summer"]
 
 
 def main():
@@ -24,26 +20,35 @@ def main():
         df = pd.read_csv(real_path, dtype={"GEOID": str})
         is_mock = False
     else:
+        from src.mock_data import generate as generate_mock
         df = generate_mock()
         is_mock = True
 
-    gap_cols = per_tract_parts(df)
-    full = pd.concat([df, gap_cols], axis=1)
-
-    group_col = "region" if "region" in full.columns else [c for c in full.columns if c not in CORE_COLS][0]
-    grp = full.groupby(group_col).agg(
+    group_col = "region" if "region" in df.columns else next(c for c in STRATA_COLS if c in df.columns)
+    grp = df.groupby(group_col, dropna=False).agg(
         n_tracts=("GEOID", "count"),
         pct_missing_ge1=("parts_defined", lambda s: float((s < 3).mean() * 100)),
     ).reset_index()
     worst_group = grp.sort_values("pct_missing_ge1", ascending=False).iloc[0]
 
-    movers = full.copy()
-    movers["delta"] = movers["score_hidden_gap"] - movers["score_coverage"]
-    movers_ranked = movers.sort_values("delta", ascending=False).head(15)
+    driver = "roads"
+    if all(c in df.columns for c in ["transport_defined", "building_defined", "poi_defined"]):
+        rates = df[["transport_defined", "building_defined", "poi_defined"]].mean()
+        driver = rates.idxmin().replace("_defined", "")
+
+    parts = ["transport_gap", "building_gap", "poi_gap"]
+    defined = ["transport_defined", "building_defined", "poi_defined"]
+    if all(c in df.columns for c in parts + defined):
+        hidden = df[parts].where(df[defined].values, other=1.0)
+        df["score_hidden_gap"] = hidden.mean(axis=1)
+    else:
+        df["score_hidden_gap"] = df["coverage_gap_score"]
+    df["delta"] = df["score_hidden_gap"] - df["coverage_gap_score"]
+    movers_ranked = df.sort_values("delta", ascending=False).head(15)
 
     html_rows = "".join(
         f"<tr><td>{row['GEOID']}</td><td>{row.get('region','?')}</td><td>{row['parts_defined']}</td>"
-        f"<td>{row['score_coverage']:.3f}</td><td>{row['score_hidden_gap']:.3f}</td><td>{row['delta']:.3f}</td></tr>"
+        f"<td>{row['coverage_gap_score']:.3f}</td><td>{row['score_hidden_gap']:.3f}</td><td>{row['delta']:.3f}</td></tr>"
         for _, row in movers_ranked.iterrows()
     )
 
@@ -59,13 +64,14 @@ th{{background:#f4f4f4}} code{{background:#f4f4f4;padding:2px 4px;border-radius:
 .badge{{display:inline-block;background:#fff3cd;border:1px solid #ffe69c;color:#664d03;padding:4px 10px;border-radius:6px;font-size:13px;margin-bottom:16px}}
 </style></head><body>
 <h1>Bias Bounty: Mapping Equity Challenge</h1>
-{'<p class="badge">Built from synthetic demo data -- real challenge data not yet loaded</p>' if is_mock else ''}
+{'<p class="badge">Built from synthetic demo data -- real challenge data not yet computed</p>' if is_mock else ''}
 <h2>The yardstick is missing where the risk is</h2>
-<p>The scoring rule drops any coverage part (roads, buildings, places) with nothing in the reference
-data to compare against. A tract then scores on one or two parts instead of three, and the hardest
-tracts to map can look fully covered.</p>
+<p>The scoring rule drops any coverage component (roads, buildings, places) with nothing in the
+reference data to compare against. A tract then scores on one or two components instead of
+three, and the hardest tracts to map can look fully covered.</p>
 <p>Worst-affected group by <code>{group_col}</code>: <b>{worst_group[group_col]}</b> --
-{worst_group['pct_missing_ge1']:.1f}% of tracts missing at least one part.</p>
+{worst_group['pct_missing_ge1']:.1f}% of tracts missing at least one component. Driven mostly by
+<b>{driver}</b> coverage.</p>
 <h2>Hidden-gap re-score: top movers</h2>
 <table><tr><th>GEOID</th><th>Region</th><th>Parts defined</th><th>Coverage score</th><th>Hidden-gap score</th><th>Delta</th></tr>
 {html_rows}</table>
@@ -75,7 +81,7 @@ tracts to map can look fully covered.</p>
 <li><b>Evacuation</b>: no named highway means planning falls back to unnamed local roads neither dataset scores.</li>
 <li><b>Relief</b>: FEMA/NGO metrics like this one can rank these communities as low-need when the real story is "unmeasured."</li>
 </ul>
-<p><i>Source: <a href="https://github.com/atindahhillary/Bias-Bounty-Mapping-Equity-Challenge">Bias-Bounty-Mapping-Equity-Challenge</a> repo. Full interactive workbench runs locally via <code>streamlit run app.py</code>.</i></p>
+<p><i>Source: <a href="https://github.com/atindahhillary/Bias-Bounty-Mapping-Equity-Challenge">Bias-Bounty-Mapping-Equity-Challenge</a> repo, computed {'directly from the live challenge data at source.coop' if not is_mock else 'from synthetic demo data'}. Full interactive workbench runs locally via <code>streamlit run app.py</code>.</i></p>
 </body></html>"""
 
     docs_dir = ROOT / "docs"

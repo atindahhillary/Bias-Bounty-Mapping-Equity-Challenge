@@ -1,52 +1,55 @@
 # Bias Bounty: Mapping Equity Challenge
 
-Working system for the Overture-vs-reference coverage-gap challenge. Two goals, one tool:
+Working system for [Zindi's Bias Bounty Mapping Equity Challenge](https://zindi.world/competitions/bias-bounty-mapping-equity-challenge)
+($10,000 USD, closes 1 Nov 2026). Two goals, one tool:
 
-1. **Get on the leaderboard** by reverse-engineering the scoring formula exactly (RMSE against a
-   fixed reference, not something to model), not by training anything.
-2. **Win Best Bias Discovery / Best Documentation** with the real finding: the scoring rule drops
-   any coverage part (roads, buildings, places) that has nothing in the reference data to compare
-   against, so the tracts hardest to map score artificially close to "full coverage."
+1. **Get on the leaderboard** by computing the coverage-gap score exactly as documented --
+   the formula isn't hidden, it's fully specified in the challenge data's own README, so this
+   is direct computation, not modeling.
+2. **Win Best Bias Discovery / Best Documentation** with the real finding: the scoring rule
+   drops any coverage component (roads, buildings, places) that has nothing in the reference
+   data to compare against, so the tracts hardest to map score artificially close to "full
+   coverage." Missingness turns out to be driven almost entirely by the **road** component
+   (no named highway on record), not buildings or POIs.
 
 Live writeup draft: **https://atindahhillary.github.io/Bias-Bounty-Mapping-Equity-Challenge/**
-(seeded from synthetic demo data until the real challenge export is loaded — see below).
 
-## Run the workbench
+## Data source
+
+All challenge data is public, no signup: `source.coop/humane-intelligence/bias-bounty-mapping-equity-challenge`.
+`src/pipeline.py` queries it directly over HTTPS via DuckDB's `httpfs`/`spatial` extensions --
+nothing needs to be downloaded first, though the full run does pull real compute (spatial joins
+over up to 4.4M building footprints for the largest region).
+
+## Run it
 
 ```bash
 pip install -r requirements.txt
+python scripts/run_pipeline.py    # computes all 4 regions from the live bucket -- takes a while
 streamlit run app.py
 ```
 
 Three tabs:
 
-- **Formula Lab** — solves the constant-submission trick (`RMSE^2 = variance + (mean-c)^2`) for
-  the hidden reference mean/variance, tracks your 10-submissions/day budget, exports the
-  prediction CSV for whichever formula variant you're testing.
-- **Bias Discovery** — parts-defined-per-tract counts, breakdowns by any strata column (region,
-  tribal, SVI quartile, rural/urban, wildfire/heat exposure, or any of the ~232 columns in the
-  real export), and the hidden-gap re-score that ranks tracts by how much their score would rise
-  if a missing part counted as a full gap instead of being dropped.
+- **Submission Lab** — the per-region submission CSV, already in the exact
+  `<region>-sample-submission.csv` shape with real components filled in; a constant-submission
+  RMSE cross-check; a 10-per-day / 300-total submission budget tracker.
+- **Bias Discovery** — parts-defined-per-tract counts, breakdowns by real strata (urban/rural,
+  SVI, tribal, drought, wildfire hazard, heat days), which component drives the missingness,
+  and the hidden-gap re-score that ranks tracts by how much their score would rise if a missing
+  component counted as a full gap instead of being dropped.
 - **Writeup** — auto-drafts the "yardstick is missing where the risk is" narrative from whatever
-  is currently loaded, editable, exportable as Markdown, and can regenerate `docs/index.html` for
+  is currently loaded, editable, exportable as Markdown, regenerates `docs/index.html` for
   GitHub Pages.
 
-## Loading real data
+## Method (validated against the challenge's own published numbers)
 
-Drop the actual challenge export at `data/tracts.csv` (see [`data/README.md`](data/README.md) for
-the exact schema and the traps to avoid — GEOID as text, TIGER `S1100`/`S1200` only, no ACS
-housing counts, hospitals excluded). It's gitignored on purpose; don't commit real challenge data
-or your submission log to this public repo.
-
-Regenerate the static writeup without launching Streamlit:
-
-```bash
-python scripts/build_writeup.py
-```
+See [`data/README.md`](data/README.md) for the exact formula. `src/pipeline.py` was checked
+against the README's claim that northern-ca has exactly 218 of 591 tracts with no named highway
+at all (transport component undefined) — it reproduces that number exactly before anything else
+was trusted.
 
 ## Status
 
-Currently running on synthetic demo data calibrated to the regional missing-part rates already
-published on the challenge page (Maricopa 55%, Northern California 37%, South-Central Texas 28%,
-Eastern Oklahoma 21%), with elevated missingness for tribal/high-SVI/rural tracts to test the
-core hypothesis. Swap in the real export to replace every number here with the actual finding.
+Pipeline runs against the live challenge bucket; `data/` is gitignored (regenerate with
+`python scripts/run_pipeline.py`, real challenge data shouldn't live in a public repo anyway).
